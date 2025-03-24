@@ -35,6 +35,15 @@ class PositionalEncoding(nn.Module):
         self.seq_len = seq_len
         self.dropout = nn.Dropout(dropout) # layer to randomly drop out some neurons to prevent overfitting
 
+        """
+        Per position we have d_model dimensions.
+        The div term scales the value exponentially smaller for higher dimensions.
+        Then lower dimesions have a higher frequency meaning they change faster.
+        This allows the model to learn how to attend to positions better because the offset between positions is a function of their encoding.
+        Each dimension has a relation to other dimensions and positions making it more pattern-ful in comparison to 1 hot encoded positions.
+        Resulting tensor is of shape [seq_len, d_model]
+        """
+
         # positional encoding matrix
         pe = torch.zeros(seq_len, d_model)
 
@@ -56,11 +65,24 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # this
+        """
+        Input to the positional encoding is of shape [batch_size, seq_len, d_model]
+        We add the positional encoding to the input and apply dropout.
+        Addition adds the positional information in a more predictable way without overly mutating the input.
+        Requires_grad is set to False because we don't train here.
+        Dropout randomly zeroes some elements so the model doesn't rely too strongly on a dimension.
+        Effectively, this randomization is used to prevent overfitting.
+        """
         x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
         return self.dropout(x)
 
 class LayerNormalization(nn.Module):
+
+    """
+    Layer normalization by subtracting the mean and dividing by the standard deviation.
+    This improves the training speed because the optimizer (SGD) converges faster.
+    The layer normalization paper states "that the normalization scalar σ can implicitly reduce learning rate and makes learning more stable."
+    """
 
     def __init__(self, eps: float = 10**-6) -> None: # We define epsilon as 0.000001 to avoid division by zero
         super().__init__()
@@ -80,6 +102,16 @@ class LayerNormalization(nn.Module):
         return self.alpha * (x-mean) / (std + self.eps) + self.bias
 
 class FeedForwardBlock(nn.Module):
+
+    """
+    Feed forward block maps the input to a higher dimensional space allowing the model to learn more complex patterns.
+    ReLU is used as the activation function. This gives us a mechanism to focus on relevent features.
+    ReLU is also beneficial because it's non-linear, which allows for learning of non-linear relationships.
+    3rd, cutting off values below 0 introduces sparsity which is good for quicker computation.
+    4th, in comparison to sigmoid/tanh it doesn't have the vanishing/exploding gradient problem.
+    The 2nd linear layer reduces the dimensionality back to the original input size.
+    Relative patterns should be preserved into the original dimension space.
+    """
 
     def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
         super().__init__()
